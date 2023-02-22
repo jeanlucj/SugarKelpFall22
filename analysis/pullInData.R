@@ -23,6 +23,16 @@ pedData <- read_tsv(file=here::here("data", "AllAccessionsPedigree.txt"),
                     na=c("", "NA", "N/A"))
 # Manual curating
 pedData <- pedData %>% filter(Accession != "SA18-CB-FG5")
+# These "SL19-UCONN-S156-FG3"  "SL19-UCONN-S158-FG3"  "SL19-UCONN-S23-FG4"
+# Have exact matches in the database: not sure why they are not in the pedigree
+# So we should add them to the pedigree
+addToPedData <-  tibble(
+  Accession=c("SL19-UCONN-S156-FG3", "SL19-UCONN-S158-FG3", "SL19-UCONN-S23-FG4"),
+  Female_Parent=c("SL19-UCONN-S156", "SL19-UCONN-S158", "SL19-UCONN-S23"),
+  Male_Parent=c("SL19-UCONN-S156", "SL19-UCONN-S158", "SL19-UCONN-S23"),
+  Cross_Type=rep("self, 3"))
+pedData <- dplyr::bind_rows(pedData, addToPedData)
+
 nDash <- pedData$Accession %>% sapply(function(s) gregexpr("-", s, fixed=T)[[1]] %>% length)
 tstSP <- pedData %>% filter(nDash == 2)
 tstGP <- pedData %>% filter(nDash > 2)
@@ -37,17 +47,31 @@ print(sum(fndAccInPed)) # All 179 founders in pedigree
 
 tagRelMat <- read_tsv(file=here::here("data", "DArTagRelationshipMatrix029910.tsv"), na=c("", "NA", "N/A"))
 tagAccInPed <- tagRelMat$stock_uniquename %in% pedData$Accession
-print(sum(tagAccInPed)) # 172 out of 182 DArTag'ed accessions in pedigree
+print(sum(tagAccInPed)) # 175 out of 182 DArTag'ed accessions in pedigree
 tagRelMat$stock_uniquename[!tagAccInPed]
 # [1] "SL18-SF-S13-SFG4"     "SL18-SF-S13-SFG5"     "SL18-SF-S13-SFG6"
-# [4] "SL19-UCONN-S156-FG3"  "SL19-UCONN-S158-FG3"  "SL19-UCONN-S23-FG4"
-# [7] "SL19-UCONN-S90-FG1-2" "SL20-MB-S11-FGOLD1"   "SL20-MB-S2-FG3-2"
-#[10] "SL20-MB-S6-MGOLD12"
+# [4] "SL19-UCONN-S90-FG1-2" "SL20-MB-S11-FGOLD1"   "SL20-MB-S2-FG3-2"
+# [7] "SL20-MB-S6-MGOLD12"
 # Remove the SFG names
 tagRelMat$stock_uniquename <- gsub("SFG", "FG", tagRelMat$stock_uniquename)
-# These "SL19-UCONN-S156-FG3"  "SL19-UCONN-S158-FG3"  "SL19-UCONN-S23-FG4"
-# Have exact matches in the database: not sure why they are not in the pedigree
 
+# SL19-UCONN-S90-FG1-2. Both SL19-UCONN-S90-FG1 and SL19-UCONN-S90-FG2 are in
+# the database but do not have exactly the same marker profile as SL19-UCONN-S90-FG1-2.  So we don't know what it is.
+# SL20-MB-S2-FG3-2 is 100% similar to SL20-MB-S2-FG3.  Match.
+# So drop SL20-MB-S2-FG3-2
+# SL20-MB-S6-MGOLD12 is the same as SL20-MB-S6-MG12.
+# So drop SL20-MB-S6-MGOLD12
+# SL20-MB-S11-FGOLD1 is the same as SL20-MB-S11-FG1
+# So drop SL20-MB-S11-FGOLD1
+keepFromTagData <- which(!(tagRelMat$stock_uniquename %in% c("SL19-UCONN-S90-FG1-2", "SL20-MB-S11-FGOLD1", "SL20-MB-S2-FG3-2", "SL20-MB-S6-MGOLD12")))
+tagRelMat <- tagRelMat %>% slice(keepFromTagData) %>%
+  select(c(0, keepFromTagData)+1)
+tagAccInPed <- tagRelMat$stock_uniquename %in% pedData$Accession
+print(sum(tagAccInPed)) # 178 out of 178 DArTag'ed accessions in pedigree
+tagRelMat$stock_uniquename[!tagAccInPed]
+#### DONE curating names
+
+# This might not be important any more
 # Fix indCallRate names
 sameName <- names(indCallRate) %in% tagRelMat$stock_uniquename
 print(sum(sameName))
