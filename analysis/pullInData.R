@@ -2,10 +2,17 @@ setwd("~/Documents/GitRepo/SugarKelpFall22")
 here::i_am("analysis/pullInData.R")
 library(tidyverse)
 
+# Document what QualCtrl generates...
+# badIndCall and badIndHet show which individuals have low call rate or high
+# heterozygosity rate out of 188 individuals with DArTag
+# indCallRate and indFreqHet have all the information: named vectors
+# Also mrkCallRate and mrkFreqHet: named vectors
 source(here::here("analysis", "QualCtrlDArTag.R"))
 # Phenotypes
 # This file came from downloading all phenotypes from trials where the
 # name includes "FARM"
+# Initially large matrix with individuals in rows and traits in columns
+# Lots of missing values
 phenoData <- read_csv(file=here::here("data", "AllFarmPhenotypes.csv"),
                       skip=3, guess_max=10000, na=c("", "NA", "N/A"))
 phenoData <- phenoData %>% filter(observationLevel == "plot")
@@ -13,9 +20,12 @@ sumIsNA <- apply(phenoData, 2, function(v) sum(is.na(v)))
 phenoData <- phenoData %>% select(which(sumIsNA<nrow(phenoData)))
 phenoData <- phenoData %>% select(-contains("DbId"))
 phenoData <- phenoData %>% select(-contains("program"))
+# Remove individuals that have very little phenotypic data
+# Total of 66 traits...
 justTraits <- phenoData %>% select(contains("CO_360")) %>%
   select(-contains(c("253", "320")))
 hasData <- apply(justTraits, 1, function(v) sum(!is.na(v))) > 2
+# 975 plot-level observations
 phenoData <- phenoData %>% filter(hasData)
 
 # Pedigree data
@@ -33,9 +43,10 @@ addToPedData <-  tibble(
   Cross_Type=rep("self, 3"))
 pedData <- dplyr::bind_rows(pedData, addToPedData)
 
+# Possibly separate out SPs from GPs
 nDash <- pedData$Accession %>% sapply(function(s) gregexpr("-", s, fixed=T)[[1]] %>% length)
-tstSP <- pedData %>% filter(nDash == 2)
-tstGP <- pedData %>% filter(nDash > 2)
+pedDataSP <- pedData %>% filter(nDash == 2)
+pedDataGP <- pedData %>% filter(nDash > 2)
 
 # NOTE: I have to do some curation using the markers on the DArTag to eliminate
 # the ones that look like they are mixtures
@@ -76,10 +87,31 @@ tagRelMat$stock_uniquename[!tagAccInPed]
 sameName <- names(indCallRate) %in% tagRelMat$stock_uniquename
 print(sum(sameName))
 names(indCallRate)[!sameName]
-# "SA18-CB-S10-FG6"     "SL20-JL-S3-FG1"      "SL18-OI-S15-FG3"     "SL18-UCONN-S142-MG2"
-# "SL18-JS-S6-FG2"      "SL18-NC-S5-FG3"
+# "SA18-CB-S10-FG6" "SL20-JL-S3-FG1" "SL18-OI-S15-FG3" "SL18-UCONN-S142-MG2"
+# "SL18-JS-S6-FG2" "SL18-NC-S5-FG3"
 # I'm not sure why these ended up not being loaded.
+# These are the first six samples of DArTag:
+# SA18-CB-10-FG6,SL20-JL-3-FG-1,SL18-OI-15-FG3,SL18-UCONN-S142-MG2,SL18-JS-6-FG2,SL18-NC-5-FG3
 # SL18-UCONN-S142-MG2 has a very bad call rate, but the others don't
+# We should just go ahead and recalculate the tagRelMat using the markers
+# Calculate GRM as (W %*% W^T) / sum(locusDosageVariance)
+# To calculate p, the function expects dosage coding to be 0, 1, 2 for diploid
+# and 0, 1 for haploid
+### Calculate the relationship matrix for GPs
+calcGenomicRelationshipMatrix <- function(locusMat, ploidy=2){
+  if (!any(ploidy == 1:2)) stop("Ploidy must be 1 or 2")
+  freq <- colMeans(locusMat) / ploidy
+  locusMat <- scale(locusMat, center=T, scale=F)
+  return(tcrossprod(locusMat) / sum(ploidy*freq*(1-freq)))
+}
+# Recode DArTag markers
+# Now they are 0 ref allele, 1 alt allele, 2 if both alleles.
+# I am going to consider both alleles to be heterozygote, so recode to 0.5
+# look into across() function
+tst <- dartagMrk
+for (ind in 17:204){
+  tst[,ind] <- if_else(tst[,ind]==2)
+}
 
 sameName <- tagRelMat$stock_uniquename %in% names(indCallRate)
 print(sum(sameName))
