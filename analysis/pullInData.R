@@ -32,6 +32,8 @@ phenoData <- phenoData %>% filter(hasData)
 pedData <- read_tsv(file=here::here("data", "AllAccessionsPedigree.txt"),
                     na=c("", "NA", "N/A"))
 # Manual curating
+# SA18-CB-FG5 can't be right because it should have come from an SP so it should
+# be something like SA18-CB-SX-FG5
 pedData <- pedData %>% filter(Accession != "SA18-CB-FG5")
 # These "SL19-UCONN-S156-FG3"  "SL19-UCONN-S158-FG3"  "SL19-UCONN-S23-FG4"
 # Have exact matches in the database: not sure why they are not in the pedigree
@@ -100,7 +102,7 @@ names(indCallRate)[!sameName]
 ### Calculate the relationship matrix for GPs
 calcGenomicRelationshipMatrix <- function(locusMat, ploidy=2){
   if (!any(ploidy == 1:2)) stop("Ploidy must be 1 or 2")
-  freq <- colMeans(locusMat) / ploidy
+  freq <- colMeans(locusMat, na.rm=T) / ploidy
   locusMat <- scale(locusMat, center=T, scale=F)
   return(tcrossprod(locusMat) / sum(ploidy*freq*(1-freq)))
 }
@@ -108,10 +110,13 @@ calcGenomicRelationshipMatrix <- function(locusMat, ploidy=2){
 # Now they are 0 ref allele, 1 alt allele, 2 if both alleles.
 # I am going to consider both alleles to be heterozygote, so recode to 0.5
 # look into across() function
-tst <- dartagMrk
-for (ind in 17:204){
-  tst[,ind] <- if_else(tst[,ind]==2)
-}
+duplicated_names <- duplicated(colnames(dartagMrk), fromLast = FALSE)
+dartagMrk_DupCName <- dartagMrk %>%
+  rename("SL20-MB-S2-FG3_2" = 179, "SL19-UCONN-S90-FG1_2" = 188)
+colnames(dartagMrk_DupCName)
+tst <- dartagMrk_DupCName %>%
+  mutate_at(c(17:204),funs(replace(., . > 1, 0.5)))
+tagRelMat2 <- calcGenomicRelationshipMatrix(t(tst[,17:204]), ploidy=1)
 
 sameName <- tagRelMat$stock_uniquename %in% names(indCallRate)
 print(sum(sameName))
