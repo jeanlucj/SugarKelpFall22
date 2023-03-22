@@ -116,7 +116,32 @@ dartagMrk_DupCName <- dartagMrk %>%
 colnames(dartagMrk_DupCName)
 tst <- dartagMrk_DupCName %>%
   mutate_at(c(17:204),funs(replace(., . > 1, 0.5)))
-tagRelMat2 <- calcGenomicRelationshipMatrix(t(tst[,17:204]), ploidy=1)
+
+dartagMrkImputed <- impute.glmnet(t(tst[,17:204]))
+hist(dartagMrkImputed[is.na(t(as.matrix(tst[,17:204])))])
+colnames(dartagMrkImputed) <- tst$MarkerName
+toCompare_glmnet <- dartagMrkImputed[, colnames(dartagMrkImputed) %in% colnames(dartagMrkImpEM)]
+
+tagRelMat2 <- calcGenomicRelationshipMatrix(t(dartagMrkImputed), ploidy=1)
+
+mrkToImpute <- t(tst[,17:204])
+colnames(mrkToImpute) <- tst$MarkerName
+Amat_rrBLUP <- rrBLUP::A.mat(as.matrix(mrkToImpute)*2 - 1, return.imputed=T,
+                             impute.method="EM")
+dartagMrkImpEM <- (Amat_rrBLUP$imputed + 1) / 2
+dartagMrkImpEM[dartagMrkImpEM < 0] <- 0
+dartagMrkImpEM[dartagMrkImpEM > 1] <- 1
+toCompare <- tst %>% filter(MarkerName %in% colnames(dartagMrkImpEM))
+hist(dartagMrkImpEM[is.na(t(as.matrix(toCompare[,17:204])))])
+
+plot(toCompare_glmnet[is.na(t(as.matrix(toCompare[,17:204])))],
+     dartagMrkImpEM[is.na(t(as.matrix(toCompare[,17:204])))], pch=16, cex=0.2)
+
+cor(toCompare_glmnet[is.na(t(as.matrix(toCompare[,17:204])))],
+     dartagMrkImpEM[is.na(t(as.matrix(toCompare[,17:204])))])
+
+dartImputed <- (toCompare_glmnet + dartagMrkImpEM) / 2
+dartagRelMat <- calcGenomicRelationshipMatrix(dartImputed, ploidy=1)
 
 sameName <- tagRelMat$stock_uniquename %in% names(indCallRate)
 print(sum(sameName))
