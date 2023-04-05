@@ -138,8 +138,9 @@ plot(toCompare_glmnet[is.na(t(as.matrix(toCompare[,17:204])))],
      dartagMrkImpEM[is.na(t(as.matrix(toCompare[,17:204])))], pch=16, cex=0.2)
 
 cor(toCompare_glmnet[is.na(t(as.matrix(toCompare[,17:204])))],
-     dartagMrkImpEM[is.na(t(as.matrix(toCompare[,17:204])))])
+     dartagMrkImpEM[is.na(t(as.matrix(toCompare[,17:204])))]) # 0.80
 
+# Final DArTag relationship matrix here
 dartImputed <- (toCompare_glmnet + dartagMrkImpEM) / 2
 dartagRelMat <- calcGenomicRelationshipMatrix(dartImputed, ploidy=1)
 
@@ -147,6 +148,7 @@ sameName <- tagRelMat$stock_uniquename %in% names(indCallRate)
 print(sum(sameName))
 tagRelMat$stock_uniquename[!sameName]
 
+# Final WGS relationship matrix here
 wgsRelMat <- read_tsv(file=here::here("data", "WGSRelationshipMatrix.tsv"), na=c("", "NA", "N/A"))
 wgsRelMat <- wgsRelMat$stock_uniquename %in% pedData$Accession
 # All the wgs accessions in pedigree

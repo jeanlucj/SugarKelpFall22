@@ -1,3 +1,9 @@
+# Notes for 5 April 2023
+# I recognize how calcCCmatrixHaploid works but not calcCCmatrixBiphasic
+# At the moment, we have pedData downloaded from sugarkelpbase.  It is not
+# formatted properly for either of the calcCCmatrix functions.  A first task
+# will be to write a formatting function for it.
+
 #' Calculate a coefficient of coancestry matrix
 #'
 #' \code{calcCCmatrixBiphasic} returns an additive relationship matrix from a
@@ -61,7 +67,7 @@ calcCCmatrixBiphasic <- function(pedColumns){
         }
         ccMat[prog, prog] <<- ccSelf
     }#END calcCCmatRow
-    
+
     # calculate Coef Coan matrix here
     nInd <- nrow(pedColumns)
     ccMat <- matrix(0, nInd, nInd)
@@ -165,7 +171,7 @@ calcCCmatrixHaploid <- function(pedColumns){
             ccMat[prog, 1:progM1] <<- ccMat[1:progM1, prog] <<- (sireRow + damRow) / 2
         }
     }#END calcCCmatRow
-    
+
     # calculate Coef Coan matrix here
     hapPed <- makeHaploidPed(pedColumns)
     hapOnePointer <- hapPed$hapOnePointer
@@ -200,13 +206,13 @@ calcCCmatrixHaploid <- function(pedColumns){
 makeHaploidPed <- function(pedColumns){
     # The haplotype pedigree to be constructed
     hapPed <- NULL
-    
+
     # What row we are in as we construct hapPed
     runningRowCount <- 1
-    
+
     # Each haploid in pedColumns has one row in hapPed. This points to it.
     hapOnePointer <- NULL
-    
+
     # Each diploid in pedColumns has two rows in hapPed. This points to them.
     dipTwoPointers <- NULL
     makeHapPedRow <- function(pedRow,

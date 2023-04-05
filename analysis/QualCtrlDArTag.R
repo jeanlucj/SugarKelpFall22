@@ -51,7 +51,3 @@ sum(indFreqHet > 0.03)
 jpeg("./output/HetRateAgainstCallRate.jpeg")
 plot(indCallRate, indFreqHet)
 dev.off()
-
-# Impute markers using glmnet
-dartagMrkImputed <- dartagMrk %>%
-  mutate_at(c(17:204),funs(replace(., . > 1, 0.5)))
