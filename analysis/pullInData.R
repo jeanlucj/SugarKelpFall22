@@ -117,10 +117,11 @@ colnames(dartagMrk_DupCName)
 tst <- dartagMrk_DupCName %>%
   mutate_at(c(17:204),funs(replace(., . > 1, 0.5)))
 
+source(here::here("analysis", "imputeMarkerMatrix.R"))
+
 dartagMrkImputed <- impute.glmnet(t(tst[,17:204]))
 hist(dartagMrkImputed[is.na(t(as.matrix(tst[,17:204])))])
 colnames(dartagMrkImputed) <- tst$MarkerName
-toCompare_glmnet <- dartagMrkImputed[, colnames(dartagMrkImputed) %in% colnames(dartagMrkImpEM)]
 
 tagRelMat2 <- calcGenomicRelationshipMatrix(t(dartagMrkImputed), ploidy=1)
 
@@ -133,6 +134,7 @@ dartagMrkImpEM[dartagMrkImpEM < 0] <- 0
 dartagMrkImpEM[dartagMrkImpEM > 1] <- 1
 toCompare <- tst %>% filter(MarkerName %in% colnames(dartagMrkImpEM))
 hist(dartagMrkImpEM[is.na(t(as.matrix(toCompare[,17:204])))])
+toCompare_glmnet <- dartagMrkImputed[, colnames(dartagMrkImputed) %in% colnames(dartagMrkImpEM)]
 
 plot(toCompare_glmnet[is.na(t(as.matrix(toCompare[,17:204])))],
      dartagMrkImpEM[is.na(t(as.matrix(toCompare[,17:204])))], pch=16, cex=0.2)
@@ -150,8 +152,45 @@ tagRelMat$stock_uniquename[!sameName]
 
 # Final WGS relationship matrix here
 wgsRelMat <- read_tsv(file=here::here("data", "WGSRelationshipMatrix.tsv"), na=c("", "NA", "N/A"))
-wgsRelMat <- wgsRelMat$stock_uniquename %in% pedData$Accession
+print(sum(wgsRelMat$stock_uniquename %in% pedData$Accession))
 # All the wgs accessions in pedigree
+
+dim(fndRelMat); head(colnames(fndRelMat)); class(fndRelMat)
+dim(dartagRelMat);  head(colnames(dartagRelMat)); class(dartagRelMat)
+dim(wgsRelMat); head(colnames(wgsRelMat)); class(wgsRelMat)
+
+# Make the pedigree relationship matrix
+# Decide what to keep from the full pedigree data
+# Keep:
+# SPs for which we have phenotypes
+# GPs for which we have marker data
+# SPs that are parents of GPs for which we have marker data
+# GPs that were used in crossing
+# SPs that are parents of GPs that were used in crossing
+# Marker datasets on GPs
+gpsWithMarkers <- union(rownames(dartagRelMat), wgsRelMat$stock_uniquename)
+print(intersect(rownames(dartagRelMat), wgsRelMat$stock_uniquename))
+spsWithPhenotypes <- phenoData %>% filter(`Photo score 0-3|CO_360:0000300` > 0) %>% pull(germplasmName)
+spsWithMarkers <- fndRelMat %>% pull(stock_uniquename)
+
+pedGPsWithMrk <- pedData %>% filter(Accession %in% gpsWithMarkers)
+parentsGPsWithMrk <- union(pedGPsWithMrk$Female_Parent, pedGPsWithMrk$Male_Parent) %>% setdiff(NA)
+
+pedSPsWithPhen <- pedData %>% filter(Accession %in% spsWithPhenotypes)
+# Check that all the parents are actually GPs
+nDash <- pedSPsWithPhen$Female_Parent %>% sapply(function(s) gregexpr("-", s, fixed=T)[[1]] %>% length)
+femParSP <- pedSPsWithPhen %>% filter(nDash == 2)
+nDash <- pedSPsWithPhen$Male_Parent %>% sapply(function(s) gregexpr("-", s, fixed=T)[[1]] %>% length)
+maleParSP <- pedSPsWithPhen %>% filter(nDash == 2)
+
+
+
+gpsParSPsWithPhen <- union(pedSPsWithPhen$Female_Parent, pedSPsWithPhen$Male_Parent) %>% setdiff(NA)
+pedGPsParSPsWithPhen <- pedData %>% filter(Accession %in% gpsParSPsWithPhen)
+grandParSPsWithPhen <- union(pedGPsParSPsWithPhen$Female_Parent, pedGPsParSPsWithPhen$Male_Parent) %>% setdiff(NA)
+
+allGPsToKeep <- union(gpsWithMarkers, gpsParSPsWithPhen)
+allSPsToKeep <- union(spsWithMarkers, parentsGPsWithMrk) %>% union(grandParSPsWithPhen)
 
 curatePed <- FALSE
 if (curatePed){
