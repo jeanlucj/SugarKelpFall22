@@ -139,11 +139,11 @@ calcHmatrix <- function(gMat, aMat, aMatFounders, wgtAmat=0.05){
 #'  4. The matrix is symmetrical
 #'
 #' @param pedColumns A data.frame with three columns. The first column
-#'  has to be the row number and sire and dam columns refer directly to rows
+#'  has to be the row number dam and sire columns refer directly to rows
 #'  of the pedigree. Parents of founders need to be set to 0 (ZERO). The row
 #'  of a child has to be after (i.e. a higher row number) that of its parents.
-#'  Indicate a haploid progeny by setting the second column to NA. If both
-#'  columns have numbers in them, the progeny is assumed to be diploid.
+#'  Indicate a haploid progeny by setting the third column to NA. If both dam
+#'  and sire columns have numbers in them, the progeny is assumed to be diploid.
 #'  If an individual has one known and one unknown parent, set the unknown
 #'  parent to 0.
 #'
@@ -212,27 +212,24 @@ makeHaploidPed <- function(pedColumns){
 
     # Each haploid in pedColumns has one row in hapPed. This points to it.
     hapOnePointer <- NULL
-
     # Each diploid in pedColumns has two rows in hapPed. This points to them.
     dipTwoPointers <- NULL
-    makeHapPedRow <- function(pedRow,
-    runningRowCount,
-    hapOnePointer,
-    dipTwoPointers){
+    makeHapPedRow <- function(pedRow, runningRowCount,
+                              hapOnePointer, dipTwoPointers){
         if (is.na(pedRow[3])){
             # It's a haploid
             hapOnePointer <- rbind(hapOnePointer, c(pedRow[1], runningRowCount))
-            if (pedRow[2] == 0) return(list(matrix(c(runningRowCount, 0, 0), nrow=1),
-            runningRowCount+1,
-            hapOnePointer,
-            dipTwoPointers))
+            if (pedRow[2] == 0) return(
+              list(matrix(c(runningRowCount, 0, 0), nrow=1),
+                   runningRowCount+1,
+                   hapOnePointer,
+                   dipTwoPointers))
             dip <- which(dipTwoPointers[,1] == pedRow[2])
             if (length(dip) == 0)
             stop(paste("Diploid parent of haploid", pedRow[1], "not in pedigree"))
-            return(list(matrix(c(runningRowCount, dipTwoPointers[dip, 2:3]), nrow=1),
-            runningRowCount+1,
-            hapOnePointer,
-            dipTwoPointers))
+            return(
+              list(matrix(c(runningRowCount, dipTwoPointers[dip, 2:3]), nrow=1),
+                   runningRowCount+1, hapOnePointer, dipTwoPointers))
         } else{
             # It's a diploid
             dipTwoPointers <- rbind(dipTwoPointers, c(pedRow[1], runningRowCount + 0:1))
@@ -252,21 +249,22 @@ makeHaploidPed <- function(pedColumns){
                 stop(paste("Haploid parent of diploid", pedRow[1], "not in pedigree"))
                 row2 <- c(runningRowCount+1, hapOnePointer[hap, 2], NA)
             }
-            return(list(rbind(row1, row2),
-            runningRowCount+2,
-            hapOnePointer,
-            dipTwoPointers))
+            return(list(rbind(row1, row2), runningRowCount+2,
+                        hapOnePointer, dipTwoPointers))
         }
     }
     for (i in 1:nrow(pedColumns)){
-        hapPedRow <- makeHapPedRow(pedColumns[i,], runningRowCount, hapOnePointer, dipTwoPointers)
-        hapPed <- rbind(hapPed, hapPedRow[[1]])
-        runningRowCount <- hapPedRow[[2]]
-        hapOnePointer <- hapPedRow[[3]]
-        dipTwoPointers <- hapPedRow[[4]]
+      hapPedRow <- makeHapPedRow(pedColumns[i,], runningRowCount,
+                                 hapOnePointer, dipTwoPointers)
+      hapPed <- rbind(hapPed, hapPedRow[[1]])
+      runningRowCount <- hapPedRow[[2]]
+      hapOnePointer <- hapPedRow[[3]]
+      dipTwoPointers <- hapPedRow[[4]]
     }
     rownames(hapPed) <- NULL
-    return(list(hapPed=hapPed, hapOnePointer=hapOnePointer, dipTwoPointers=dipTwoPointers))
+    return(list(hapPed=hapPed,
+                hapOnePointer=hapOnePointer,
+                dipTwoPointers=dipTwoPointers))
 }
 
 #' Calculate a mixed haploid/diploid coefficient of coancestry matrix from a

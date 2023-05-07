@@ -34,6 +34,7 @@ pedigreeToCCmatrix <- function(threeColPed){
 # to refer directly to rows, if you have an ID matrix with character names,
 # this function converts to integer IDs that point to rows.
 convertNamesToRows <- function(nameMat){
+  nameMat[is.na(nameMat)] <- "0"
   nameToRow <- 1:nrow(nameMat)
   names(nameToRow) <- nameMat[,1]
   parVecToRow <- function(parVec){
@@ -41,7 +42,9 @@ convertNamesToRows <- function(nameMat){
     rowID[parVec != "0"] <- nameToRow[parVec[parVec != "0"]]
     return(rowID)
   }
-  return(cbind(nameToRow, parVecToRow(nameMat[,2]), parVecToRow(nameMat[,3])))
+  toRet <- cbind(nameToRow, parVecToRow(nameMat[,2]), parVecToRow(nameMat[,3]))
+  colnames(toRet) <- c("id", "par1", "par2")
+  return(toRet)
 }
 
 # Calculate GRM as (W %*% W^T) / sum(2pq)
