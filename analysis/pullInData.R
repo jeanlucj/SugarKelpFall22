@@ -1,13 +1,15 @@
-setwd("~/Documents/GitRepo/SugarKelpFall22")
-here::i_am("analysis/pullInData.R")
 library(tidyverse)
 
-# Document what QualCtrl generates...
+here::i_am("analysis/pullInData.R")
+
+# Document what QualCtrl generates:
 # badIndCall and badIndHet show which individuals have low call rate or high
 # heterozygosity rate out of 188 individuals with DArTag
 # indCallRate and indFreqHet have all the information: named vectors
-# Also mrkCallRate and mrkFreqHet: named vectors
+# mrkCallRate and mrkFreqHet: named vectors
 source(here::here("analysis", "QualCtrlDArTag.R"))
+
+########################################
 # Phenotypes
 # This file came from downloading all phenotypes from trials where the
 # name includes "FARM"
@@ -22,6 +24,8 @@ phenoData <- phenoData %>% select(-contains("DbId"))
 phenoData <- phenoData %>% select(-contains("program"))
 # Remove individuals that have very little phenotypic data
 # Total of 66 traits...
+# "Presence of sorus tissue abs/pres|CO_360:0000253"
+# "Successful release unsucc/succ|CO_360:0000320"
 justTraits <- phenoData %>% select(contains("CO_360")) %>%
   select(-contains(c("253", "320")))
 hasData <- apply(justTraits, 1, function(v) sum(!is.na(v))) > 2
@@ -32,9 +36,12 @@ phenoData123 <- phenoData %>% dplyr::filter(`Photo score 0-3|CO_360:0000300` > 0
 # Just the ones with OK photo scores and from GOM
 phenoData123G <- phenoData123 %>% dplyr::slice(-grep("SNE", studyName))
 
+########################################
 # Pedigree data
 pedData <- read_tsv(file=here::here("data", "AllAccessionsPedigree.txt"),
                     na=c("", "NA", "N/A"))
+
+########################################
 # Manual curating
 # SA18-CB-FG5 can't be right because it should have come from an SP so it should
 # be something like SA18-CB-SX-FG5
@@ -69,6 +76,7 @@ fixMixed <- function(s){
   return(paste0(substr(s, 1, whereDash3-1), "Mixed"))
 }
 pedData$Accession[hasDashMx] <- sapply(pedData$Accession[hasDashMx], fixMixed)
+
 # There are some SPs whose pedigrees are given in terms of their grand-parental
 # SPs.  I don't want that.
 nDash <- pedData$Accession %>%
@@ -137,7 +145,10 @@ pedDataGP <- pedData %>% filter(nDash > 2)
 # NOTE: I have to do some curation using the markers on the DArTag to eliminate
 # the ones that look like they are mixtures
 
+########################################
 # Marker relationship matrices
+# NOTE: these relationship matrices were downloaded directly from sugarkelpbase
+# I need to specify what parameters were used in terms of missing and MAF
 fndRelMat <- read_tsv(file=here::here("data", "DArTSeqRelationshipMatrix029910.tsv"), na=c("", "NA", "N/A"))
 fndAccInPed <- fndRelMat$stock_uniquename %in% pedData$Accession
 print(sum(fndAccInPed)) # All 179 founders in pedigree
@@ -236,7 +247,6 @@ cor(toCompare_glmnet[is.na(t(as.matrix(toCompare[,17:ncol(toCompare)])))],
 # Final DArTag relationship matrix here
 dartImputed <- (toCompare_glmnet + dartagMrkImpEM) / 2
 dartagRelMat <- calcGenomicRelationshipMatrix(dartImputed, ploidy=1)
-tst <- apply(dartImputed, 1, sd)
 
 sameName <- tagRelMat$stock_uniquename %in% names(indCallRate)
 print(sum(sameName))
@@ -325,11 +335,11 @@ pedCNR <- pedKeep
 pedCNR <- convertNamesToRows(as.matrix(pedCNR))
 # Check whether there are parents that come after their offspring
 rowNum <- 1:nrow(pedCNR)
-sum(pedCNR[,2] > rowNum)
-sum(pedCNR[,3] > rowNum)
+sum(pedCNR[, 2] > rowNum)
+sum(pedCNR[, 3] > rowNum)
 
 source(here::here("code", "GS_ms", "calcCCmatrixBiphasic.R"))
-pedCNR[pedKeep$ploidy == "GP",3] <- NA
+pedCNR[pedKeep$ploidy == "GP", 3] <- NA
 pedRelMat <- calcCCmatrixHaploid(pedCNR)
 
 if (FALSE){ # I don't think this is strictly needed. To move forward skip for now
@@ -420,15 +430,80 @@ unique(diag(pedRelMatm[pedKeep$ploidy=="GP", pedKeep$ploidy=="GP"]))
 
 # OK. None of this is terribly conclusive that we've done it all right, but it's
 # what we've got
+library(CovCombR)
 
 covList<-NULL
 covList[[1]] <- pedRelMatm + diag(1e-3, nrow(pedRelMatm))
 covList[[2]] <- fndRelMatm + diag(1e-3, nrow(fndRelMatm))
 covList[[3]] <- wgsRelMatm + diag(1e-3, nrow(wgsRelMatm))
-covList[[4]] <- dartagRelMat + diag(1e-1, nrow(dartagRelMat))
+covList[[4]] <- dartagRelMat + diag(1e-3, nrow(dartagRelMat))
 
 weights <- c(1, 2, 2, 2)
-outCovComb <- CovComb(Klist=covList, nu=3000, w=weights, Kinit=pedRelMatm)
+# The CovComb part needs to be done on a server with many cores...
+# outCovComb <- CovComb(Klist=covList, nu=3000, w=weights, Kinit=covList[[1]])
+# saveRDS(outCovComb, here::here("output", "outCovComb.rds"))
+
+outCovComb <- readRDS(here::here("output", "outCovComb.rds"))
+
+# Looking at a few parameters to make sure they make sense
+phenoData123G$studyYear %>% unique
+phenoData123G$studyName %>% unique
+phenoData123G$locationName %>% unique
+phenoData123G$germplasmName %>% unique %>% length
+(phenoData123G$germplasmName %>% unique) %in% (outCovComb %>% rownames) %>% sum
+
+# Linear model:
+# y = Xb + Zu
+# The fixed effects will only by the trials ($studyName)
+X <- model.matrix(as.formula("~ -1 + studyName"), data=phenoData123G)
+# Make the incidence matrix connecting outCovComb with phenoData123G
+allLevFact <- rownames(outCovComb)
+Z <- model.matrix(~ -1 + factor(germplasmName, levels=allLevFact),
+                  data=phenoData123G)
+
+# Proof of concept
+tst <- rrBLUP::mixed.solve(y=phenoData123G$`Wet yield kg/m|CO_360:0000304`,
+                           Z=Z, K=outCovComb, X=X)
+head(tst$u)
+
+# Generalize
+phenoData123G <- phenoData123G %>%
+  dplyr::mutate(logDYld=log(`Dry yield kg/m|CO_360:0000310` + 1))
+phenoData123G <-  phenoData123G %>%
+  dplyr::mutate(logWYld=log(`Wet yield kg/m|CO_360:0000304` + 1))
+notIsNAphenDat <- apply(phenoData123G, 2, function(v) sum(!is.na(v)))
+traitsToAnalyze <- phenoData123G %>%
+  dplyr::select((notIsNAphenDat > 300) %>% which) %>%
+  dplyr::select(contains("CO_360")) %>% colnames
+traitsToAnalyze <- c(traitsToAnalyze, c("logDYld", "logWYld"))
+
+calcBLUPsOnTrait <- function(trait){
+  print(trait)
+  y <- pull(phenoData123G, trait)
+  print(range(y, na.rm=T))
+  print(paste("Number equal to Zero", sum(y == 0, na.rm=T)))
+  rrBLUPoutTrait <- try(
+    rrBLUP::mixed.solve(y=y, Z=Z, K=outCovComb, X=X),
+    silent=TRUE)
+  if(inherits(rrBLUPoutTrait, "try-error")){
+    toRet <- numeric(nrow(outCovComb))
+  } else{
+    toRet <- rrBLUPoutTrait$u
+  }
+  return(toRet)
+}
+
+allBLUPs <- sapply(traitsToAnalyze, calcBLUPsOnTrait)
+
+# apply(allBLUPs, 2, range)
+tst <- cor(allBLUPs)
+View(tst)
+
+allBLUPst <- bind_cols(pedKeep,
+                       as_tibble(allBLUPs))
+readr::write_csv(allBLUPst,
+                 here::here("output", "allBLUPs.csv"),
+                 quote="none", col_names=T)
 
 ###############################################################################
 # There are some accessions where the SP S number has leading zero, which
